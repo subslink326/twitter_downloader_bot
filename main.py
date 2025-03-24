@@ -139,7 +139,29 @@ def reply_videos(update: Update, context: CallbackContext, twitter_videos: list[
                 log_handling(update, 'info', 'Video is too large, sending direct link')
                 update.effective_message.reply_text(f'Video is too large for Telegram upload. Direct video link:\n'
                                         f'{video_url}', quote=True)
-        except (requests.HTTPError, KeyError, telegram.error.BadRequest, requests.exceptions.ConnectionError) as exc:
+        except KeyError as exc:
+            if str(exc) == "'content-length'" or str(exc) == "'Content-Length'":
+                log_handling(update, 'info', f'Missing content-length header, downloading video directly')
+                try:
+                    # Download video to memory and send it
+                    with TemporaryFile() as tf:
+                        log_handling(update, 'info', 'Downloading video without content-length')
+                        for chunk in request.iter_content(chunk_size=128):
+                            tf.write(chunk)
+                        log_handling(update, 'info', 'Video downloaded, uploading to Telegram')
+                        tf.seek(0)
+                        update.effective_message.reply_video(video=tf, quote=True, supports_streaming=True)
+                        log_handling(update, 'info', 'Sent video via direct download')
+                except Exception as inner_exc:
+                    log_handling(update, 'info', f'Failed to download video: {inner_exc}')
+                    update.effective_message.reply_text(f'Error occurred when trying to send video. Direct link:\n'
+                                        f'{video_url}', quote=True)
+            else:
+                log_handling(update, 'info', f'{exc.__class__.__qualname__}: {exc}')
+                log_handling(update, 'info', 'Error occurred when trying to send video, sending direct link')
+                update.effective_message.reply_text(f'Error occurred when trying to send video. Direct link:\n'
+                                        f'{video_url}', quote=True)
+        except (requests.HTTPError, telegram.error.BadRequest, requests.exceptions.ConnectionError) as exc:
             log_handling(update, 'info', f'{exc.__class__.__qualname__}: {exc}')
             log_handling(update, 'info', 'Error occurred when trying to send video, sending direct link')
             update.effective_message.reply_text(f'Error occurred when trying to send video. Direct link:\n'
